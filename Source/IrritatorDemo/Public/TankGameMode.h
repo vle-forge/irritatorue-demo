@@ -9,10 +9,12 @@
 
 #include "TankGameMode.generated.h" // always last
 
+class ACameraActor;
+
 /**
  * Builds the scene of the demo in any map (the empty map of the engine by
- * default): a tank, a light, a floor and a camera. Without map and asset, the
- * demo is only C++ and the files of Content/Irritator.
+ * default): a tank, a sky, a sun, a floor and a fixed camera. Without map and
+ * asset, the demo is only C++ and the files of Content/Irritator.
  */
 UCLASS()
 class IRRITATORDEMO_API ATankGameMode : public AGameModeBase
@@ -23,4 +25,12 @@ public:
     ATankGameMode();
 
     virtual void StartPlay() override;
+    virtual void PostLogin(APlayerController* NewPlayer) override;
+
+private:
+    /// The fixed camera becomes the view of the player.
+    void UseCamera(APlayerController* PC);
+
+    UPROPERTY(Transient)
+    TObjectPtr<ACameraActor> Camera;
 };

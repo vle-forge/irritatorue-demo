@@ -14,7 +14,7 @@ A tank is filled by a simulation (`Content/Irritator/irtue-demo/tank.pirt`):
   `UIrritatorObserverComponent`. The tank turns red when the level goes over 5.
 
 Keys: `Up` / `Down` change the inflow (below 0 the tank drains), `R`
-restarts, `P` pauses.
+restarts, `P` pauses, `Escape` quits. The yellow plate marks the threshold.
 
 The scene is built in C++ by `ATankGameMode` in the empty map of the engine:
 the repository has no map and no asset.

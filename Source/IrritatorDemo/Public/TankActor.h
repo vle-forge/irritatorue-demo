@@ -12,7 +12,6 @@
 class UIrritatorObserverComponent;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
-class UTextRenderComponent;
 
 /**
  * A tank filled by the simulation of Content/Irritator/irtue-demo/tank.pirt:
@@ -20,7 +19,8 @@ class UTextRenderComponent;
  * overflow (a cross of the level 5, an output) turns the tank red, and the
  * alarms (a counter, an output) count the overflows.
  *
- * Keys: Up and Down change the inflow, R restarts, P pauses.
+ * Keys: Up and Down change the inflow (below 0 the tank drains), R restarts,
+ * P pauses, Escape quits.
  */
 UCLASS()
 class IRRITATORDEMO_API ATankActor : public AActor
@@ -52,6 +52,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Irritator Demo")
     int32 GetAlarmCount() const;
 
+    /// The lines shown by ATankHUD: the state of the simulation and the keys.
+    TArray<FString> GetStatusLines() const;
+
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
 
@@ -63,13 +66,15 @@ private:
     void LessInflow() { SetInflow(Inflow - InflowStep); }
     void RestartSimulation();
     void TogglePause();
+    void QuitDemo();
     void SetColor(const FLinearColor& Color);
 
     UPROPERTY(VisibleAnywhere, Category = "Irritator Demo")
     TObjectPtr<UStaticMeshComponent> Tank;
 
+    /// A thin plate at the height of the threshold.
     UPROPERTY(VisibleAnywhere, Category = "Irritator Demo")
-    TObjectPtr<UTextRenderComponent> Label;
+    TObjectPtr<UStaticMeshComponent> Marker;
 
     UPROPERTY(VisibleAnywhere, Category = "Irritator Demo")
     TObjectPtr<UIrritatorObserverComponent> Overflow;

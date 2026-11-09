@@ -9,11 +9,11 @@
 
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -24,6 +24,10 @@ constexpr double Threshold = 5.0; // the level of the overflow in tank.pirt
 
 const FLinearColor Normal(0.1f, 0.6f, 0.2f);
 const FLinearColor Alarm(0.9f, 0.1f, 0.05f);
+const FLinearColor MarkerColor(0.9f, 0.7f, 0.1f);
+
+// The cube of 1 m is 2 m high at the threshold.
+constexpr double HeightAtThreshold = 2.0;
 
 } // namespace
 
@@ -43,14 +47,16 @@ ATankActor::ATankActor()
     if (Basic.Succeeded())
         Tank->SetMaterial(0, Basic.Object);
 
-    // Beside the tank, not attached to it: the scale of the tank follows the
-    // level. Turned to the camera of ATankGameMode, in -X.
-    Label = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Label"));
-    Label->SetupAttachment(GetRootComponent());
-    Label->SetRelativeLocationAndRotation(FVector(0.0, 0.0, 330.0), FRotator(0.0, 180.0, 0.0));
-    Label->SetHorizontalAlignment(EHTA_Center);
-    Label->SetWorldSize(18.f);
-    Label->SetTextRenderColor(FColor::White);
+    Marker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Marker"));
+    Marker->SetupAttachment(GetRootComponent());
+    Marker->SetRelativeLocation(FVector(0.0, 0.0, 100.0 * HeightAtThreshold));
+    Marker->SetRelativeScale3D(FVector(1.4, 1.4, 0.03));
+    Marker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Marker->SetCastShadow(false); // over the tank
+    if (Cube.Succeeded())
+        Marker->SetStaticMesh(Cube.Object);
+    if (Basic.Succeeded())
+        Marker->SetMaterial(0, Basic.Object);
 
     Overflow             = CreateDefaultSubobject<UIrritatorObserverComponent>(TEXT("Overflow"));
     Overflow->OutputName = TEXT("overflow");
@@ -67,6 +73,9 @@ void ATankActor::BeginPlay()
     Material = Tank->CreateDynamicMaterialInstance(0);
     SetColor(Normal);
 
+    if (UMaterialInstanceDynamic* MarkMaterial = Marker->CreateDynamicMaterialInstance(0))
+        MarkMaterial->SetVectorParameterValue(TEXT("Color"), MarkerColor);
+
     Overflow->OnEvent.AddDynamic(this, &ATankActor::OnOverflow);
 
     if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) {
@@ -75,6 +84,7 @@ void ATankActor::BeginPlay()
         InputComponent->BindKey(EKeys::Down, IE_Pressed, this, &ATankActor::LessInflow);
         InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ATankActor::RestartSimulation);
         InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ATankActor::TogglePause);
+        InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ATankActor::QuitDemo);
     }
 
     UIrritatorSubsystem* Sub = GetWorld()->GetSubsystem<UIrritatorSubsystem>();
@@ -86,22 +96,29 @@ void ATankActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
-    UIrritatorSubsystem* Sub = GetWorld()->GetSubsystem<UIrritatorSubsystem>();
-    if (not Sub)
-        return;
-
-    // The cube of 1 m is 2 m high at the threshold, its base on the ground.
-    const double Level  = GetTankLevel();
-    const double ScaleZ = FMath::Max(Level, 0.05) / Threshold * 2.0;
+    // The base of the cube on the ground.
+    const double ScaleZ = FMath::Max(GetTankLevel(), 0.05) / Threshold * HeightAtThreshold;
     Tank->SetRelativeScale3D(FVector(1.0, 1.0, ScaleZ));
     Tank->SetRelativeLocation(FVector(0.0, 0.0, 50.0 * ScaleZ));
+}
 
-    const FString Error = Sub->GetLastError();
-    Label->SetText(FText::FromString(FString::Printf(
-      TEXT("t = %.1f   level = %.2f   inflow = %.1f   alarms = %d%s\n"
-           "[Up/Down] inflow   [R] restart   [P] pause%s%s"),
-      Sub->GetSimulationTime(), Level, Inflow, GetAlarmCount(), Sub->IsPlaying() ? TEXT("") : TEXT("   (paused)"),
-      Error.IsEmpty() ? TEXT("") : TEXT("\n"), *Error)));
+TArray<FString> ATankActor::GetStatusLines() const
+{
+    TArray<FString> Lines;
+
+    const UIrritatorSubsystem* Sub = GetWorld()->GetSubsystem<UIrritatorSubsystem>();
+    if (not Sub)
+        return Lines;
+
+    Lines.Add(FString::Printf(TEXT("t = %.1f   level = %.2f / %.0f   inflow = %.1f   alarms = %d%s"),
+                              Sub->GetSimulationTime(), GetTankLevel(), Threshold, Inflow, GetAlarmCount(),
+                              Sub->IsPlaying() ? TEXT("") : TEXT("   (paused)")));
+    Lines.Add(TEXT("[Up/Down] inflow (below 0 the tank drains)   [R] restart   [P] pause   [Esc] quit"));
+
+    if (const FString Error = Sub->GetLastError(); not Error.IsEmpty())
+        Lines.Add(Error);
+
+    return Lines;
 }
 
 void ATankActor::SetInflow(double Value)
@@ -146,6 +163,11 @@ void ATankActor::TogglePause()
 {
     if (UIrritatorSubsystem* Sub = GetWorld()->GetSubsystem<UIrritatorSubsystem>())
         Sub->IsPlaying() ? Sub->Pause() : Sub->Play();
+}
+
+void ATankActor::QuitDemo()
+{
+    UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 }
 
 void ATankActor::SetColor(const FLinearColor& Color)
